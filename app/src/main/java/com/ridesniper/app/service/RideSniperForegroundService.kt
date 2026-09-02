@@ -124,7 +124,11 @@ class RideSniperForegroundService : Service() {
                 OverlayResultHolder.lastParseResult = parsed
 
                 val input = parsed.toInputOrNull()
-                if (input == null || parsed.confidence < currentSettings.ocrConfidenceThreshold) {
+                if (input == null) {
+                    withContext(Dispatchers.Main) {
+                        overlayController.showNoOfferDetected()
+                    }
+                } else if (parsed.confidence < currentSettings.ocrConfidenceThreshold) {
                     withContext(Dispatchers.Main) {
                         onNeedsManualCorrection?.invoke(parsed)
                     }
