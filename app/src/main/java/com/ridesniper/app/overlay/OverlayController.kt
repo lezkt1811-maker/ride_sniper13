@@ -7,10 +7,28 @@ import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
@@ -52,7 +70,12 @@ class OverlayController(private val context: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = startX
+            // Snap the INITIAL placement to whichever screen edge the requested
+            // x is closer to, with a small margin, so the bubble never lands
+            // over Uber's controls in the middle of the screen. This only
+            // affects where it appears on launch — dragging afterward is
+            // completely free and unclamped, same as before.
+            x = edgeSnappedX(startX, sizeDp)
             y = startY
         }
         bubbleParams = params
@@ -63,7 +86,7 @@ class OverlayController(private val context: Context) {
             setViewTreeViewModelStoreOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
-                BubbleView(sizeDp = sizeDp, isBusy = busyState.value, lastRecommendation = lastRecommendationState.value)
+                RsBubble(sizeDp = sizeDp, isBusy = busyState.value)
             }
             setOnTouchListener(dragAndClickListener(params))
         }
@@ -72,6 +95,20 @@ class OverlayController(private val context: Context) {
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleOwner.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         windowManager.addView(view, params)
+    }
+
+    /** Picks the nearer of the left/right screen edge for the given x, with an 8dp margin. */
+    private fun edgeSnappedX(requestedX: Int, sizeDp: Int): Int {
+        val density = context.resources.displayMetrics.density
+        val screenWidthPx = context.resources.displayMetrics.widthPixels
+        val bubbleSizePx = (sizeDp * density).toInt()
+        val marginPx = (8 * density).toInt()
+
+        val leftEdgeX = marginPx
+        val rightEdgeX = (screenWidthPx - bubbleSizePx - marginPx).coerceAtLeast(leftEdgeX)
+        val screenCenterX = screenWidthPx / 2
+
+        return if (requestedX < screenCenterX) leftEdgeX else rightEdgeX
     }
 
     fun setBusy(busy: Boolean) {
@@ -108,6 +145,54 @@ class OverlayController(private val context: Context) {
         view.postDelayed({ hideResult() }, autoDismissMillis)
     }
 
+    /**
+     * Immediate feedback shown the instant a genuine tap (not drag, not
+     * long-press) is detected, before the analyzer pipeline has produced
+     * anything. Replaced automatically once showResult() or
+     * showNoOfferDetected() is called for this tap.
+     */
+    fun showAnalyzing() {
+        showTransientMessage("Analyzing…", autoDismissMillis = 6000)
+    }
+
+    /**
+     * Ready for the foreground service to call once it determines OCR found
+     * no usable offer on screen at all (as opposed to a partial parse that
+     * goes to the manual correction sheet instead). Not yet wired up: doing
+     * so requires a small addition in RideSniperForegroundService.kt, which
+     * was intentionally left untouched pending your confirmation.
+     */
+    fun showNoOfferDetected() {
+        showTransientMessage("No offer detected", autoDismissMillis = 2200)
+    }
+
+    private fun showTransientMessage(text: String, autoDismissMillis: Long) {
+        hideResult()
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayWindowType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = 220
+        }
+
+        val view = ComposeView(context).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeViewModelStoreOwner(lifecycleOwner)
+            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+            setContent { MessageCard(text) }
+        }
+        cardView = view
+        windowManager.addView(view, params)
+
+        view.postDelayed({ hideResult() }, autoDismissMillis)
+    }
+
     fun hideResult() {
         cardView?.let { runCatching { windowManager.removeView(it) } }
         cardView = null
@@ -136,7 +221,12 @@ class OverlayController(private val context: Context) {
         var downTimeMillis = 0L
         var moved = false
         val longPressThresholdMillis = 500L
-        val dragTouchSlopPx = 12f
+
+        // Android's own density-aware standard for tap-vs-drag disambiguation,
+        // instead of a hardcoded raw-pixel value that doesn't scale across
+        // devices (a fixed 12px is too tight on a ~3x density phone like the
+        // Galaxy S23 and made ordinary finger tremor register as a drag).
+        val touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
 
         return View.OnTouchListener { view, event ->
             when (event.action) {
@@ -152,7 +242,7 @@ class OverlayController(private val context: Context) {
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - touchStartX
                     val dy = event.rawY - touchStartY
-                    if (abs(dx) > dragTouchSlopPx || abs(dy) > dragTouchSlopPx) {
+                    if (abs(dx) > touchSlopPx || abs(dy) > touchSlopPx) {
                         moved = true
                         params.x = initialX + dx.toInt()
                         params.y = initialY + dy.toInt()
@@ -166,6 +256,14 @@ class OverlayController(private val context: Context) {
                         if (heldMillis >= longPressThresholdMillis) {
                             openFullApp()
                         } else {
+                            // Standard Android convention when a View.OnTouchListener
+                            // consumes a tap: call performClick() for accessibility
+                            // services / lint correctness, then run our own action.
+                            view.performClick()
+                            // Immediate visible feedback before the analyzer pipeline
+                            // (which runs asynchronously and can take a moment) has
+                            // produced anything at all.
+                            showAnalyzing()
                             onBubbleTapped?.invoke()
                         }
                     }
@@ -181,5 +279,44 @@ class OverlayController(private val context: Context) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+    }
+}
+
+private val NeonPink = Color(0xFFFF15C6)
+private val NeonPinkGlow = Color(0xFFFF8FE0)
+
+@Composable
+private fun RsBubble(sizeDp: Int, isBusy: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(sizeDp.dp)
+            .clip(CircleShape)
+            .background(NeonPink)
+            .border(BorderStroke(3.dp, NeonPinkGlow), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isBusy) "…" else "RS",
+            color = Color.White,
+            fontWeight = FontWeight.Black,
+            fontSize = (sizeDp / 3.2).sp
+        )
+    }
+}
+
+@Composable
+private fun MessageCard(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF1C1C1C))
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 16.sp
+        )
     }
 }
