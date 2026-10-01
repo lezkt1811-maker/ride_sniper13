@@ -1,29 +1,34 @@
 package com.ridesniper.app.model
 
 /**
- * All user-editable settings. Defaults match the spec: 2012 Ford Escape 3.0L V6 AWD,
- * 16.5 default MPG, $0.20/mile wear reserve, PICKY strategy.
+ * All user-editable settings. Kansas City Market Spec: Ford Escape 18 MPG,
+ * $0.20/mile wear reserve, NORMAL strategy with adjusted thresholds for KC real data.
+ * Uber baseline: $1.10-$1.15/mile gross + $2-3 per-trip fees.
  */
 data class AppSettings(
     val gasPricePerGallon: Double = 3.50,
-    val mpg: Double = 16.5,
+    val mpg: Double = 18.0,
     val wearCostPerMile: Double = 0.20,
+
+    // Per-trip Uber fees to deduct from payout (insurance, admin, etc.)
+    val platformFeesPerTrip: Double = 2.50,
 
     val strategy: StrategyPreset = StrategyPreset.DEFAULT,
 
     // Editable overrides layered on top of the strategy preset.
-    val preferredPerMile: Double = StrategyPreset.DEFAULT.preferredPerMile,
-    val minimumPerMile: Double = 1.50,
-    val hardDeclinePerMile: Double = 1.25,
-    val preferredPerMinute: Double = StrategyPreset.DEFAULT.preferredPerMinute,
-    val minimumPerMinute: Double = 0.40,
+    // KC thresholds: accept $0.90-1.10/mile short hops, min $0.80/mile viable runs
+    val preferredPerMile: Double = 1.10,
+    val minimumPerMile: Double = 0.90,
+    val hardDeclinePerMile: Double = 0.80,
+    val preferredPerMinute: Double = 0.30,
+    val minimumPerMinute: Double = 0.25,
 
     val longPickupThresholdMiles: Double = 3.0,
     val longRideThresholdMiles: Double = 10.0,
-    val longRidePreferredPerMile: Double = 1.75,
+    val longRidePreferredPerMile: Double = 0.95,
 
-    val airportMinimumPerMile: Double = 1.75,
-    val airportPreferredPerMile: Double = 2.00,
+    val airportMinimumPerMile: Double = 1.15,
+    val airportPreferredPerMile: Double = 1.30,
 
     val vibrationEnabled: Boolean = true,
     val overlaySizeDp: Int = 64,

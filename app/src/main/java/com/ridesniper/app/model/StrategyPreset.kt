@@ -1,21 +1,21 @@
 package com.ridesniper.app.model
 
 /**
- * The three built-in strategy presets. Values are $/mile and $/minute preferred
- * minimums used as the baseline before per-ride adjustments (long ride, airport,
- * bad-return-zone) are applied.
+ * The three built-in strategy presets for Kansas City. Values are $/mile and $/minute
+ * preferred minimums used as the baseline before per-ride adjustments (long ride,
+ * airport, bad-return-zone) are applied. Tuned for realistic KC earnings.
  */
 enum class StrategyPreset(
     val label: String,
     val preferredPerMile: Double,
     val preferredPerMinute: Double
 ) {
-    NORMAL("Normal", 1.50, 0.40),
-    PICKY("Picky", 2.00, 0.50),
-    EXTREME("Extreme", 2.50, 0.60);
+    NORMAL("Normal", 1.10, 0.30),          // Accept most short hops in high-density zones
+    PICKY("Picky", 1.25, 0.35),             // Wait for better per-mile rates
+    EXTREME("Extreme", 1.50, 0.40);         // Only premium rides
 
     companion object {
-        val DEFAULT = PICKY
+        val DEFAULT = NORMAL  // Changed from PICKY to NORMAL for KC market
 
         fun fromLabel(label: String): StrategyPreset =
             entries.firstOrNull { it.label.equals(label, ignoreCase = true) } ?: DEFAULT

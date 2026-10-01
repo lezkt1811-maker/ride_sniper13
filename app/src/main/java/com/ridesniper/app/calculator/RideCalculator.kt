@@ -20,7 +20,8 @@ object RideCalculator {
         val wearCost = settings.wearCostPerMile * totalMiles
         val totalVehicleCostPerMile = fuelCostPerMile + settings.wearCostPerMile
 
-        val estimatedProfit = input.payout - fuelCost - wearCost
+        // Deduct platform fees (Uber's insurance, admin, etc.) for true net calculation
+        val estimatedProfit = input.payout - fuelCost - wearCost - settings.platformFeesPerTrip
         val netPerMile = estimatedProfit / totalMiles
         val netPerHour = (estimatedProfit / totalMinutes) * 60.0
 
