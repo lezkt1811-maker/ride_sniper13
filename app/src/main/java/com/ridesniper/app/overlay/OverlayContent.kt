@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ridesniper.app.model.Recommendation
 import com.ridesniper.app.model.RideCalculationResult
+import com.ridesniper.app.util.ZoneTimingFinder
 import java.util.Locale
 
 private val GreenTake = Color(0xFF00E676)
@@ -129,5 +130,85 @@ private fun Divider() {
             .height(1.dp)
             .background(Color(0xFF2A2A2A))
     )
+}
+
+@Composable
+fun EnhancedResultCard(
+    result: RideCalculationResult,
+    currentZone: ZoneTimingFinder.DemandZone = ZoneTimingFinder.DemandZone.UNKNOWN,
+    onDismiss: () -> Unit
+) {
+    val color = colorFor(result.recommendation)
+    val demandLevel = ZoneTimingFinder.getDemandLevel(java.time.LocalDateTime.now(), currentZone)
+    val demandColor = when (demandLevel) {
+        ZoneTimingFinder.DemandLevel.PEAK -> Color(0xFFEF5350)
+        ZoneTimingFinder.DemandLevel.HIGH -> Color(0xFFFFB74D)
+        ZoneTimingFinder.DemandLevel.NORMAL -> Color(0xFF64B5F6)
+        ZoneTimingFinder.DemandLevel.LOW -> Color(0xFF90A4AE)
+        ZoneTimingFinder.DemandLevel.DEAD -> Color(0xFF616161)
+    }
+
+    Box(
+        modifier = Modifier
+            .widthIn(max = 360.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFF121212))
+            .border(BorderStroke(1.5.dp, color), RoundedCornerShape(20.dp))
+            .padding(18.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = labelFor(result.recommendation),
+                color = color,
+                fontWeight = FontWeight.Black,
+                fontSize = 26.sp
+            )
+
+            // Zone context
+            if (currentZone != ZoneTimingFinder.DemandZone.UNKNOWN) {
+                Text(
+                    text = "📍 ${currentZone.label} - Demand: ${demandLevel.label}",
+                    color = demandColor,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+
+            Text(
+                text = "$%.2f/mi   $%.2f/min".format(Locale.US, result.grossPerMile, result.grossPerMinute),
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Divider()
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatColumn("Offer", "$%.2f".format(Locale.US, result.input.payout))
+                StatColumn("Total mi", "%.1f".format(Locale.US, result.totalMiles))
+                StatColumn("Total min", "%.0f".format(Locale.US, result.totalMinutes))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatColumn("Pickup", "%.1f mi / %.0f min".format(Locale.US, result.input.pickupMiles, result.input.pickupMinutes))
+                StatColumn("Trip", "%.1f mi / %.0f min".format(Locale.US, result.input.tripMiles, result.input.tripMinutes))
+            }
+            Divider()
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatColumn("Fuel", "$%.2f".format(Locale.US, result.fuelCost))
+                StatColumn("Wear", "$%.2f".format(Locale.US, result.wearCost))
+                StatColumn("Net profit", "$%.2f".format(Locale.US, result.estimatedProfit))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatColumn("Net/mi", "$%.2f".format(Locale.US, result.netPerMile))
+                StatColumn("Net/hr", "$%.2f".format(Locale.US, result.netPerHour))
+            }
+            if (result.warnings.isNotEmpty()) {
+                Divider()
+                Text(
+                    text = result.warnings.joinToString("  ·  ") { it.label },
+                    color = Color(0xFFBBBBBB),
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
 }
 

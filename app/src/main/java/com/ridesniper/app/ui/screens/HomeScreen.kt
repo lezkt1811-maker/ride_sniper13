@@ -17,6 +17,8 @@ import com.ridesniper.app.model.Recommendation
 import com.ridesniper.app.model.RideCalculationResult
 import com.ridesniper.app.model.StrategyPreset
 import com.ridesniper.app.ui.RideSniperViewModel
+import com.ridesniper.app.ui.components.ZoneStatusCard
+import com.ridesniper.app.ui.components.PostDropoffAlertDialog
 import com.ridesniper.app.ui.theme.DeclineRed
 import com.ridesniper.app.ui.theme.MaybeYellow
 import com.ridesniper.app.ui.theme.TakeGreen
@@ -31,6 +33,7 @@ fun HomeScreen(
 ) {
     val settings by viewModel.settings.collectAsState()
     val latestResult by viewModel.latestResult.collectAsState()
+    val postDropoffAnalysis by viewModel.postDropoffAnalysis.collectAsState()
     var gasPriceText by remember(settings.gasPricePerGallon) { mutableStateOf("%.2f".format(Locale.US, settings.gasPricePerGallon)) }
 
     Column(
@@ -55,6 +58,17 @@ fun HomeScreen(
                 description = "Starts the floating bubble and grants one-time screen-capture access. You'll be asked again each time Android restarts capture (this is an OS restriction, not a bug).",
                 buttonLabel = "Start Ride Sniper",
                 onClick = onStartAnalyzer
+            )
+        }
+
+        // Zone timing finder: live demand levels by area
+        ZoneStatusCard()
+
+        // Post-dropoff alert when analysis is available
+        postDropoffAnalysis?.let {
+            PostDropoffAlertDialog(
+                analysis = it,
+                onDismiss = { viewModel.dismissPostDropoffAnalysis() }
             )
         }
 

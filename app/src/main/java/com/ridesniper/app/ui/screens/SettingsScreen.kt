@@ -35,6 +35,9 @@ fun SettingsScreen(viewModel: RideSniperViewModel) {
             NumberSetting("Wear/maintenance reserve ($/mile)", settings.wearCostPerMile) {
                 viewModel.updateSettings { s -> s.copy(wearCostPerMile = it) }
             }
+            NumberSetting("Platform fees per trip (Uber cut) ($)", settings.platformFeesPerTrip) {
+                viewModel.updateSettings { s -> s.copy(platformFeesPerTrip = it) }
+            }
         }
 
         SettingsSection("Thresholds") {

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.ridesniper.app.RideSniperApp
 import com.ridesniper.app.calculator.RideCalculator
+import com.ridesniper.app.calculator.RideAdviser
 import com.ridesniper.app.data.database.RideEntity
 import com.ridesniper.app.data.repository.RideRepository
 import com.ridesniper.app.data.repository.RideStats
@@ -14,6 +15,8 @@ import com.ridesniper.app.ocr.OcrParseResult
 import com.ridesniper.app.service.OverlayResultHolder
 import com.ridesniper.app.settings.SettingsDataStore
 import com.ridesniper.app.util.DestinationRiskStore
+import com.ridesniper.app.util.PostDropoffRedirection
+import com.ridesniper.app.util.ZoneTimingFinder
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -40,6 +43,15 @@ class RideSniperViewModel(
 
     private val _latestResult = MutableStateFlow<RideCalculationResult?>(null)
     val latestResult: StateFlow<RideCalculationResult?> = _latestResult
+
+    private val _latestAdvice = MutableStateFlow<RideAdviser.RideAdvice?>(null)
+    val latestAdvice: StateFlow<RideAdviser.RideAdvice?> = _latestAdvice
+
+    private val _postDropoffAnalysis = MutableStateFlow<PostDropoffRedirection.DropoffAnalysis?>(null)
+    val postDropoffAnalysis: StateFlow<PostDropoffRedirection.DropoffAnalysis?> = _postDropoffAnalysis
+
+    private val _currentZone = MutableStateFlow(ZoneTimingFinder.DemandZone.UNKNOWN)
+    val currentZone: StateFlow<ZoneTimingFinder.DemandZone> = _currentZone
 
     init {
         viewModelScope.launch {
@@ -72,7 +84,21 @@ class RideSniperViewModel(
             val currentSettings = settings.value
             val zone = destinationRiskStore.getRating(input.destinationText)
             val result = RideCalculator.calculate(input, currentSettings, zone)
+
+            // Generate enhanced advice with zone timing and post-dropoff routing
+            val advice = RideAdviser.adviseOnRide(input, currentSettings, currentZone.value, zone)
             _latestResult.value = result
+            _latestAdvice.value = advice
+
+            // Analyze post-dropoff routing
+            val dropoffAnalysis = PostDropoffRedirection.analyzePostDropoff(
+                currentTime = java.time.LocalDateTime.now(),
+                dropoffZone = zone,
+                dropoffLocation = input.destinationText,
+                lastPickupZone = currentZone.value
+            )
+            _postDropoffAnalysis.value = dropoffAnalysis
+
             OverlayResultHolder.lastCalculationResult = result
             repository.saveResult(result)
             _pendingCorrection.value = null
@@ -106,6 +132,23 @@ class RideSniperViewModel(
     }
 
     fun getZoneRating(destinationText: String): ZoneRating = destinationRiskStore.getRating(destinationText)
+
+    fun setCurrentZone(zone: ZoneTimingFinder.DemandZone) {
+        _currentZone.value = zone
+    }
+
+    fun dismissPostDropoffAnalysis() {
+        _postDropoffAnalysis.value = null
+    }
+
+    fun getPostDropoffActions(): List<String> {
+        val analysis = _postDropoffAnalysis.value
+        return if (analysis != null) {
+            PostDropoffRedirection.getPostDropoffActions(analysis)
+        } else {
+            emptyList()
+        }
+    }
 
     suspend fun exportCsv(): String = repository.exportCsv(statsFilter.value)
 
