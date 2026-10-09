@@ -5,7 +5,7 @@ package com.ridesniper.app.model
  * 16.5 default MPG, $0.20/mile wear reserve, PICKY strategy.
  */
 data class AppSettings(
-    val gasPricePerGallon: Double = 3.50,
+    val gasPricePerGallon: Double = 4.08,
     val mpg: Double = 16.5,
     val wearCostPerMile: Double = 0.20,
 
@@ -33,7 +33,7 @@ data class AppSettings(
     val ocrConfidenceThreshold: Float = 0.55f,
     val autoDeleteScreenshots: Boolean = true,
 
-    val lastGasPriceEntry: Double = 3.50
+    val lastGasPriceEntry: Double = 4.08
 )
 
 val AIRPORT_KEYWORDS = listOf(
